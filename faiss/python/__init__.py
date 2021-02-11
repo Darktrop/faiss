@@ -412,7 +412,7 @@ def handle_Index(the_class):
         self.reconstruct_n_c(n0, ni, swig_ptr(x))
         return x
 
-    def replacement_update_vectors(self, keys, x):
+    def replacement_update_vectors(self, keys, x):        
         n = keys.size
         assert keys.shape == (n, )
         assert x.shape == (n, self.d)
@@ -421,6 +421,30 @@ def handle_Index(the_class):
 
     # The CPU does not support passed-in output buffers
     def replacement_range_search(self, x, thresh):
+        """Search vectors that are within a distance of the query vectors.
+        
+        Parameters
+        ----------
+        x : array_like
+            Query vectors, shape (n, d) where d is appropriate for the index.
+            `dtype` must be float32.
+        thresh : float
+            Threshold to select neighbors. All elements within this radius are returned, 
+            except for maximum inner product indexes, where the elements above the 
+            threshold are returned
+
+        Returns
+        -------
+        lims: array_like
+            Startring index of the results for each query vector, size n+1.         
+        D : array_like
+            Distances of the nearest neighbors, shape `lims[n]`. The distances for
+            query i are in `D[lims[i]:lims[i+1]]`.
+        I : array_like
+            Labels of nearest neighbors, shape `lims[n]`. The labels for query i 
+            are in `I[lims[i]:lims[i+1]]`.
+            
+        """
         n, d = x.shape
         assert d == self.d
 
@@ -434,6 +458,8 @@ def handle_Index(the_class):
         return lims, D, I
 
     def replacement_sa_encode(self, x, codes=None):
+
+
         n, d = x.shape
         assert d == self.d
 
