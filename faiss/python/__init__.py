@@ -29,6 +29,8 @@ __version__ = "%d.%d.%d" % (FAISS_VERSION_MAJOR,
 
 
 def replace_method(the_class, name, replacement, ignore_missing=False):
+    """ Replaces a method in a class with another version. The old method 
+    is renamed to method_name_c (because presumably it was implemented in C) """
     try:
         orig_method = getattr(the_class, name)
     except AttributeError:
@@ -42,7 +44,20 @@ def replace_method(the_class, name, replacement, ignore_missing=False):
     setattr(the_class, name, replacement)
 
 def handle_Clustering():
+  
     def replacement_train(self, x, index, weights=None):
+        """Perform clustering on a set of vectors. The index is used for assignment. 
+        
+        Parameters
+        ----------
+        x : array_like
+            Training vectors, shape (n, self.d). `dtype` must be float32.
+        index : faiss.Index
+            Index used for assignment. The dimension of the index should be `self.d`.
+        weigths : array_like, optional 
+            Per training sample weight (size n) used when computing the weighted 
+            average to obtain the centroid (default is 1 for all training vectors).            
+        """        
         n, d = x.shape
         assert d == self.d
         if weights is not None:
@@ -50,7 +65,23 @@ def handle_Clustering():
             self.train_c(n, swig_ptr(x), index, swig_ptr(weights))
         else:
             self.train_c(n, swig_ptr(x), index)
+            
     def replacement_train_encoded(self, x, codec, index, weights=None):
+        """ Perform clustering on a set of compressed vectors. The index is used for assignment. 
+        The decompression is performed on-the-fly.
+        
+        Parameters
+        ----------
+        x : array_like
+            Training vectors, shape (n, codec.code_size()). `dtype` must be `uint8`.
+        codec : faiss.Index
+            Index used to decode the vectors. Should have dimension `self.d`.
+        index : faiss.Index
+            Index used for assignment. The dimension of the index should be `self.d`.
+        weigths : array_like, optional 
+            Per training sample weight (size n) used when computing the weighted 
+            average to obtain the centroid (default is 1 for all training vectors).
+        """
         n, d = x.shape
         assert d == codec.sa_code_size()
         assert codec.d == index.d
@@ -69,11 +100,31 @@ handle_Clustering()
 def handle_Quantizer(the_class):
 
     def replacement_train(self, x):
+        """ Train the quantizer on a set of training vectors.
+            
+        Parameters
+        ----------
+        x : array_like
+            Training vectors, shape (n, self.d). `dtype` must be float32.
+        """        
         n, d = x.shape
         assert d == self.d
         self.train_c(n, swig_ptr(x))
 
     def replacement_compute_codes(self, x):
+        """ Compute the codes corresponding to a set of vectors.
+        
+        Parameters
+        ----------
+        x : array_like
+            Vectors to encode, shape (n, self.d). `dtype` must be float32.
+        
+        Returns
+        -------
+        codes : array_like
+            Corresponding code for each vector, shape (n, self.code_size) 
+            and `dtype` uint8.       
+        """
         n, d = x.shape
         assert d == self.d
         codes = np.empty((n, self.code_size), dtype='uint8')
@@ -81,6 +132,17 @@ def handle_Quantizer(the_class):
         return codes
 
     def replacement_decode(self, codes):
+        """Reconstruct an approximation of vectors given their codes. 
+        
+        Parameters
+        ----------
+        codes : array_like
+            Codes to decode, shape (n, self.code_size). `dtype` must be uint8.
+        
+        Returns
+        -------
+            Reconstructed vectors for each code, shape `(n, d)` and `dtype` float32.        
+        """
         n, cs = codes.shape
         assert cs == self.code_size
         x = np.empty((n, self.d), dtype='float32')
@@ -120,7 +182,6 @@ def handle_Index(the_class):
         The index must be trained before vectors can be added to it.
         Vector `i` is stored in `x[i]` and has id `ids[i]`.
 
-
         Parameters
         ----------
         x : array_like
@@ -137,6 +198,25 @@ def handle_Index(the_class):
         self.add_with_ids_c(n, swig_ptr(x), swig_ptr(ids))
 
     def replacement_assign(self, x, k, labels=None):
+        """Find the k nearest neighbors of the set of vectors x in the index.
+        This is the same as the `search` method, but discards the distances.
+        
+        Parameters
+        ----------
+        x : array_like
+            Query vectors, shape (n, d) where d is appropriate for the index.
+            `dtype` must be float32.
+        k : int
+            Number of nearest neighbors.
+        labels : array_like, optional
+            Labels array to store the results. 
+
+        Returns
+        -------
+        labels: array_like
+            Labels of the nearest neighbors, shape (n, k). 
+            When not enough results are found, the label is set to -1                
+        """
         n, d = x.shape
         assert d == self.d
 
@@ -230,7 +310,7 @@ def handle_Index(the_class):
             Labels of the nearest neighbors, shape (n, k). When not enough results are found, 
             the label is set to -1
         R : array_like
-            Approximate nearest neighbor vectors, shape (n, k, d). 
+            Approximate (reconstructed) nearest neighbor vectors, shape (n, k, d). 
         """
         n, d = x.shape
         assert d == self.d
@@ -257,6 +337,21 @@ def handle_Index(the_class):
         return D, I, R
 
     def replacement_remove_ids(self, x):
+        """Remove some ids from the index. 
+        This is a O(ntotal) operation by default, so could be expensive.
+        
+        Parameters
+        ----------
+        x : array_like or faiss.IDSelector
+            Either an IDSelector that returns True for vectors to remove, or a
+            list of ids to reomove (1D array of int64). When `x` is a list, 
+            it is wrapped into an IDSelector. 
+            
+        Returns
+        -------
+        n_remove: int
+            number of vectors that were removed
+        """
         if isinstance(x, IDSelector):
             sel = x
         else:
@@ -269,6 +364,20 @@ def handle_Index(the_class):
         return self.remove_ids_c(sel)
 
     def replacement_reconstruct(self, key, x=None):
+        """Approximate reconstruction of one vector from the index. 
+
+        Parameters
+        ----------
+        key : int
+            Id of the vector to reconstruct
+        x : array_like, optional
+            pre-allocated array to store the results
+                
+        Returns
+        -------
+        x : array_like
+            Reconstructed vector, size `self.d`, `dtype`=float32
+        """
         if x is None:
             x = np.empty(self.d, dtype=np.float32)
         else:
@@ -278,6 +387,23 @@ def handle_Index(the_class):
         return x
 
     def replacement_reconstruct_n(self, n0, ni, x=None):
+        """Approximate reconstruction of vectors `n0` ... `n0 + ni - 1` from the index. 
+        Missing vectors trigger an exception.
+
+        Parameters
+        ----------
+        n0 : int
+            Id of the first vector to reconstruct
+        ni : int
+            Number of vectors to reconstruct
+        x : array_like, optional
+            pre-allocated array to store the results
+                
+        Returns
+        -------
+        x : array_like
+            Reconstructed vectors, size (`ni`, `self.d`), `dtype`=float32
+        """
         if x is None:
             x = np.empty((ni, self.d), dtype=np.float32)
         else:
