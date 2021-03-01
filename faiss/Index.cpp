@@ -54,6 +54,19 @@ void Index::reconstruct_n(idx_t i0, idx_t ni, float* recons) const {
     }
 }
 
+void Index::reconstruct_batched(size_t n, const idx_t *labels, float *recons) const {
+    for (idx_t i = 0; i < n; ++i) {
+        idx_t key = labels[i];
+        float* reconstructed = recons + i * d;
+        if (key < 0) {
+            // Fill with NaNs
+            memset(reconstructed, -1, sizeof(*reconstructed) * d);
+        } else {
+            reconstruct(key, reconstructed);
+        }
+    }
+}
+
 void Index::search_and_reconstruct(
         idx_t n,
         const float* x,
@@ -62,19 +75,7 @@ void Index::search_and_reconstruct(
         idx_t* labels,
         float* recons) const {
     search(n, x, k, distances, labels);
-    for (idx_t i = 0; i < n; ++i) {
-        for (idx_t j = 0; j < k; ++j) {
-            idx_t ij = i * k + j;
-            idx_t key = labels[ij];
-            float* reconstructed = recons + ij * d;
-            if (key < 0) {
-                // Fill with NaNs
-                memset(reconstructed, -1, sizeof(*reconstructed) * d);
-            } else {
-                reconstruct(key, reconstructed);
-            }
-        }
-    }
+    reconstruct_batched(n * k, labels, recons);
 }
 
 void Index::compute_residual(const float* x, float* residual, idx_t key) const {

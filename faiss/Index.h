@@ -164,6 +164,16 @@ struct Index {
      */
     virtual void reconstruct_n(idx_t i0, idx_t ni, float* recons) const;
 
+
+    /** Similar to reconstruct. Reconstruct n stored vectors (or an approximation if lossy coding).
+     *
+     * this function may not be defined for some indexes
+     *
+     * @param ids   ids of the vectors to reconstruct
+     * @param recons  reconstucted vectors (size n * d)
+     **/
+    virtual void reconstruct_batched(size_t n, const idx_t* ids, float *recons) const;
+
     /** Similar to search, but also reconstructs the stored vectors (or an
      * approximation in the case of lossy coding) for the search results.
      *

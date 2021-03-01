@@ -371,7 +371,13 @@ void IndexHNSW::reconstruct(idx_t key, float* recons) const {
     storage->reconstruct(key, recons);
 }
 
+void IndexHNSW::reconstruct_batched(size_t n, const idx_t* keys, float* recons) const
+{
+    storage->reconstruct_batched(n, keys, recons);
+}
+
 void IndexHNSW::shrink_level_0_neighbors(int new_size) {
+
 #pragma omp parallel
     {
         DistanceComputer* dis = storage_distance_computer(storage);

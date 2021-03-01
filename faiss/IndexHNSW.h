@@ -99,6 +99,7 @@ struct IndexHNSW : Index {
             idx_t* labels) const override;
 
     void reconstruct(idx_t key, float* recons) const override;
+    void reconstruct_batched(size_t n, const idx_t* ids, float *recons) const override;
 
     void reset() override;
 

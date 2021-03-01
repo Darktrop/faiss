@@ -131,6 +131,13 @@ int faiss_Index_reconstruct_n(
     CATCH_AND_HANDLE
 }
 
+int faiss_Index_reconstruct_batch(const FaissIndex* index, size_t n, const idx_t* key, float* recons) {
+    try {
+        reinterpret_cast<const faiss::Index*>(index)->reconstruct_batch(key, recons);
+    }
+    CATCH_AND_HANDLE
+}
+
 int faiss_Index_compute_residual(
         const FaissIndex* index,
         const float* x,
